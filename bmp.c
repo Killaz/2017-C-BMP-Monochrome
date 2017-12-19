@@ -1,5 +1,9 @@
 #include "bmp.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 BYTE setrgba(bgra *pixel, BYTE r, BYTE g, BYTE b, BYTE a) {
 	if (pixel == NULL) {
 		return 0;
@@ -9,14 +13,6 @@ BYTE setrgba(bgra *pixel, BYTE r, BYTE g, BYTE b, BYTE a) {
 	pixel->b = b;
 	pixel->a = a;
 	return 1;
-}
-
-void strCat(char *s1, const char *s2) {
-	if (s1 == NULL || s2 == NULL)
-		return;
-	while(*s1++ != 0);
-	s1--;
-	while((*s1++ = *s2++) != 0);
 }
 
 BYTE explainError(BMPError err, BYTE silent) {
@@ -34,8 +30,8 @@ BYTE explainError(BMPError err, BYTE silent) {
 			fprintf(stderr, "Input file is not BMP, and there was error:\n");
 	}
 	err &= 0xFF;
-	if (silent)
-		return 0;
+/*	if (silent)
+		return 0;*/
 	if (err == noInput) {
 		fprintf(stderr, "Input file is missing.\n");
 	} else if (err == headerReading)
@@ -113,12 +109,105 @@ BMPError writeBitMapInfoHeader(FILE *fout, const bitMapInfoHeader *bmI) {
 	return infoWriting;
 }
 
+void readingError(FILE **f, bgr ***bmD, bitMapInfoHeader *bmI) {
+	int i;
+	fclose(*f);
+	*f = NULL;
+	for (i = 0; i < bmI->biHeight; i++) {
+		free((*bmD)[i]);
+		(*bmD)[i] = NULL;
+	}
+	free(*bmD);
+	*bmD = NULL;
+}
+
+void readCanvasWithPalette(FILE **fin, bgr ***bmD, bitMapInfoHeader *bmI, bgr *palette, BMPError *err) {
+	BYTE number;
+	int i, j, k;
+	int skip = (3 * bmI->biWidth) % 4;
+	if (bmI->biBitCount == 4)
+		skip = (3 * ((bmI->biWidth & 1) == 0 ? bmI->biWidth : bmI->biWidth + 1) / 2) % 4;
+	else if (bmI->biBitCount == 2)
+		skip = (3 * upInt(bmI->biWidth, 8) / 8) % 4;
+	for (i = bmI->biHeight - 1; i >= 0; i--) {
+		for (j = 0; j < bmI->biWidth; j++) {
+			if (fread((void *) &number, 1, 1, *fin) != 1) {
+				*err |= pixelReading;
+				readingError(fin, bmD, bmI);
+			}
+			if (bmI->biBitCount == 8)
+				(*bmD)[i][j] = palette[number];
+			else if (bmI->biBitCount == 4) {
+				(*bmD)[i][j] = palette[number >> 4];
+				if (j + 1 < bmI->biWidth)
+					(*bmD)[i][j + 1] = palette[number & 0xF];
+			} else
+				for (k = 0; k < 8 && j + k < bmI->biWidth; k++) {
+					(*bmD)[i][j + k] = palette[(number >> (7 - k)) & 1];
+				}
+		}
+		fseek(*fin, skip, SEEK_CUR);
+	}
+}
+
+void readCanvasWithoutPalette(FILE **fin, bgr ***bmD, bitMapInfoHeader *bmI, BMPError *err) {
+	int i, j;
+	if (bmI->biBitCount > 16)
+		for (i = bmI->biHeight - 1; i >= 0; i--) {
+			for (j = 0; j < bmI->biWidth; j++) {
+				if (bmI->biBitCount == 32)
+					fseek(*fin, 1, SEEK_CUR);
+				if (fread((void *) &(*bmD)[i][j], 1, 3, *fin) != 3) {
+					*err |= pixelReading;
+					readingError(fin, bmD, bmI);
+				}
+			}
+			if (bmI->biBitCount == 24)
+				fseek(*fin, bmI->biWidth % 4, SEEK_CUR);
+		}
+	else {
+		WORD pixel;
+		for (i = bmI->biHeight - 1; i >= 0; i--) {
+			for (j = 0; j < bmI->biWidth; j++) {
+				if (fread((void *) &pixel, 1, 2, *fin) != 2) {
+					*err |= pixelReading;
+					readingError(fin, bmD, bmI);
+				}
+				(*bmD)[i][j].b = (pixel & 0x1F) * 255 / 31.0;
+				(*bmD)[i][j].g = ((pixel >> 5) & 0x1F) * 255 / 31.0;
+				(*bmD)[i][j].r = ((pixel >> 10) & 0x1F) * 255 / 31.0;
+			}
+			fseek(*fin, (2 * bmI->biWidth) % 4, SEEK_CUR);
+		}
+	}
+}
+
+void readPixelCanvas(FILE **fin, bgr ***bmD, bitMapFileHeader *bmF, bitMapInfoHeader *bmI, BMPError *err) {
+	int i;
+	bgr palette[256] = {{0, 0, 0}};
+	fseek(*fin, 14 + bmI->biSize, SEEK_SET);
+	if (bmI->biBitCount < 16)
+		for (i = 0; i < (1 << bmI->biBitCount); i++) {
+			if (fread(palette + i, 1, 3, *fin) != 3) {
+				break;
+			}
+			fseek(*fin, 1, SEEK_CUR);
+		}
+	fseek(*fin, bmF->bfOffBits, SEEK_SET);
+	if (bmI->biBitCount == 8 || bmI->biBitCount == 4 || bmI->biBitCount == 1)
+		readCanvasWithPalette(fin, bmD, bmI, palette, err);
+	else if (bmI->biBitCount == 32 || bmI->biBitCount == 24 || bmI->biBitCount == 16)
+		readCanvasWithoutPalette(fin, bmD, bmI, err);
+	else {
+		*err |= noSuchInputBitCount;
+		readingError(fin, bmD, bmI);
+	}
+}
+
 BMPError readBMP(const char *finName, bitMapFileHeader *bmF, bitMapInfoHeader *bmI, bgr ***bmD) {
 	FILE *fin = fopen(finName, "rb");
-	int i, j;
-	BYTE number;
+	int i;
 	BMPError err = OK;
-	bgr palette[256] = {{0, 0, 0}};
 	if (fin == NULL)
 		return noInput;
 	if ((err = readBitMapFileHeader(fin, bmF)) != OK)
@@ -131,113 +220,18 @@ BMPError readBMP(const char *finName, bitMapFileHeader *bmF, bitMapInfoHeader *b
 	for (i = 0; i < bmI->biHeight; i++)
 		if (((*bmD)[i] = malloc(bmI->biWidth * sizeof(bgr))) == NULL) {
 			err |= noMemory;
-			goto errorPoint;
+			readingError(&fin, bmD, bmI);
 		}
-#ifndef ECHO_OFF
-	fprintf(stderr, "Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
-	                bmI->biWidth, bmI->biHeight, bmI->biBitCount, bmI->biCompression, bmF->bfOffBits, bmF->bfSize, bmI->biClrUsed);
-#endif
-	fseek(fin, 14 + bmI->biSize, SEEK_SET);
-	if (bmI->biBitCount < 16)
-		for (i = 0; i < (1 << bmI->biBitCount); i++) {
-			if (fread(palette + i, 1, 3, fin) != 3) {
-				break;
-			}
-			fseek(fin, 1, SEEK_CUR);
-		}
-	fseek(fin, bmF->bfOffBits, SEEK_SET);
-	if (bmI->biBitCount == 24)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++)
-				if (fread((void *) ((*bmD)[i] + j), 1, 3, fin) != 3) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-			fseek(fin, bmI->biWidth % 4, SEEK_CUR);
-		}
-	else if (bmI->biBitCount == 8)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++) {
-				if (fread((void *) &number, 1, 1, fin) != 1) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-				(*bmD)[i][j] = palette[number];
-			}
-			fseek(fin, (3 * bmI->biWidth) % 4, SEEK_CUR);
-		}
-	else if (bmI->biBitCount == 4)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j += 2) {
-				if (fread((void *) &number, 1, 1, fin) != 1) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-				(*bmD)[i][j] = palette[number >> 4];
-				if (j + 1 < bmI->biWidth)
-					(*bmD)[i][j + 1] = palette[number & 0xF];
-			}
-			fseek(fin, (3 * ((bmI->biWidth & 1) == 0 ? bmI->biWidth : bmI->biWidth + 1) / 2) % 4, SEEK_CUR);
-		}
-	else if (bmI->biBitCount == 1)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j += 8) {
-				int k;
-				if (fread((void *) &number, 1, 1, fin) != 1) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-				for (k = 0; k < 8 && j + k < bmI->biWidth; k++) {
-					(*bmD)[i][j + k] = palette[(number >> (7 - k)) & 1];
-				}
-			}
-			fseek(fin, (3 * upInt(bmI->biWidth, 8) / 8) % 4, SEEK_CUR);
-		}
-	else if (bmI->biBitCount == 32)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++) {
-				fseek(fin, 1, SEEK_CUR);
-				if (fread((void *) &(*bmD)[i][j], 1, 3, fin) != 3) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-			}
-		}
-	else if (bmI->biBitCount == 16) {
-		WORD pixel;
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++) {
-				if (fread((void *) &pixel, 1, 2, fin) != 2) {
-					err |= pixelReading;
-					goto errorPoint;
-				}
-				(*bmD)[i][j].b = (pixel & 0x1F) * 255 / 31.0;
-				(*bmD)[i][j].g = ((pixel >> 5) & 0x1F) * 255 / 31.0;
-				(*bmD)[i][j].r = ((pixel >> 10) & 0x1F) * 255 / 31.0;
-			}
-			fseek(fin, (2 * bmI->biWidth) % 4, SEEK_CUR);
-		}
-	} else {
-		err |= noSuchInputBitCount;
-		goto errorPoint;
-	}
-	fclose(fin);
-	if (0) {
-		errorPoint:
+	readPixelCanvas(&fin, bmD, bmF, bmI, &err);
+	if (fin != NULL)
 		fclose(fin);
-		for (i = 0; i < bmI->biHeight; i++) {
-			free((*bmD)[i]);
-			(*bmD)[i] = NULL;
-		}
-		free(*bmD);
-		*bmD = NULL;
-	}
 	return err;
 }
 
 BMPError writeBMP(const char *foutName, const bitMapFileHeader *bmFIn, const bitMapInfoHeader *bmIIn, bgr **bmD, BYTE newBitCount) {
 	FILE *fout;
-	LONG i, j;
+	LONG i, j, k;
+	unsigned long long median = 0;
 	bgra tmp;
 	BMPError err = OK;
 	bitMapFileHeader *bmF;
@@ -273,94 +267,48 @@ BMPError writeBMP(const char *foutName, const bitMapFileHeader *bmFIn, const bit
 		return err;
 	}
 	bmI = NULL, bmF = NULL;
-	if (newBitCount == 1) {
-		unsigned long long median = 0;
-		setrgba(&tmp, 0, 0, 0, 0);
+	int skip = (3 * upInt(bmIIn->biWidth, 8) / 8) % 4;
+	if (newBitCount == 4)
+		skip = (3 * ((bmIIn->biWidth & 1) == 0 ? bmIIn->biWidth : bmIIn->biWidth + 1) / 2) % 4;
+	else if (newBitCount == 8)
+		skip = (3 * bmIIn->biWidth) % 4;
+	j = 255 / ((1 << newBitCount) - 1);
+	for (i = 0; i < 256; i += j) {
+		setrgba(&tmp, i, i, i, 0);
 		if (fwrite(&tmp, 1, 4, fout) != 4) {
 			fclose(fout);
 			return pixelWriting;
 		}
-		setrgba(&tmp, 255, 255, 255, 0);
-		if (fwrite(&tmp, 1, 4, fout) != 4) {
-			fclose(fout);
-			return pixelWriting;
-		}
+ 	}
+ 	if (newBitCount == 1) {
 		for (i = 0; i < bmIIn->biHeight; i++)
 			for (j = 0; j < bmIIn->biWidth; j++)
 				median += (bmD[i][j].r + bmD[i][j].g + bmD[i][j].b);
 		median /= (bmIIn->biHeight * bmIIn->biWidth);
-		for (i = bmIIn->biHeight - 1; i >= 0; i--) {
-			BYTE number = 0;
-			for (j = 0; j < bmIIn->biWidth; j += 8) {
-				int k;
-				number = 0;
-				for (k = 0; k < 8 && j + k < bmIIn->biWidth; k++)
+	}
+	for (i = bmIIn->biHeight - 1; i >= 0; i--) {
+		BYTE number = 0;
+		for (j = 0; j < bmIIn->biWidth; j += 8 / newBitCount) {
+			number = 0;
+			for (k = 0; k < 8 / newBitCount && j + k < bmIIn->biWidth; k++)
+				if (newBitCount == 1) {
 					if (bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b > (int) median)
 						number |= (1 << (7 - k));
-				if (fwrite(&number, 1, 1, fout) != 1) {
-					fclose(fout);
-					return pixelWriting;
-				}
-			}
-			number = 0;
-			for (j = 0; j < (3 * upInt(bmIIn->biWidth, 8) / 8) % 4; j++)
-				if (fwrite(&number, 1, 1, fout) != 1) {
-					fclose(fout);
-					return pixelWriting;
-				}
-		}
-	} else if (newBitCount == 4) {
-		for (i = 0; i < 256; i += 17) {
-			setrgba(&tmp, i, i, i, 0);
-			if (fwrite(&tmp, 1, 4, fout) != 4) {
+				} else
+					number |= ((BYTE)((bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b) / (51.0 / (newBitCount / 8 * 16 + 1)) + 0.5)
+					                 << (8 - newBitCount) * (1 - k));
+			if (fwrite(&number, 1, 1, fout) != 1) {
 				fclose(fout);
 				return pixelWriting;
 			}
 		}
-		for (i = bmIIn->biHeight - 1; i >= 0; i--) {
-			BYTE number = 0;
-			for (j = 0; j < bmIIn->biWidth; j += 2) {
-				number = 0;
-				number |= ((BYTE)((bmD[i][j].r + bmD[i][j].g + bmD[i][j].b) / 51.2 + 0.5) << 4);
-				if (j + 1 < bmIIn->biWidth)
-					number |= (BYTE)((bmD[i][j + 1].r + bmD[i][j + 1].g + bmD[i][j + 1].b) / 51.2 + 0.5);
-				if ((fwrite(&number, 1, 1, fout) != 1)) {
-					fclose(fout);
-					return pixelWriting;
-				}
-			}
-			number = 0;
-			for (j = 0; j < (3 * ((bmIIn->biWidth & 1) == 0 ? bmIIn->biWidth : bmIIn->biWidth + 1) / 2) % 4; j++)
-				if (fwrite(&number, 1, 1, fout) != 1) {
-					fclose(fout);
-					return pixelWriting;
-				}
-		}
-	} else {
-		for (i = 0; i < 256; i += 1) {
-			setrgba(&tmp, i, i, i, 0);
-			if (fwrite(&tmp, 1, 4, fout) != 4) {
+		number = 0;
+		for (j = 0; j < skip; j++)
+			if (fwrite(&number, 1, 1, fout) != 1) {
 				fclose(fout);
 				return pixelWriting;
 			}
-		}
-		for (i = bmIIn->biHeight - 1; i >= 0; i--) {
-			BYTE number = 0;
-			for (j = 0; j < bmIIn->biWidth; j++) {
-				number = (BYTE) ((bmD[i][j].r + bmD[i][j].g + bmD[i][j].b) / 3.0 + 0.5);
-				if (fwrite((void *) &number, 1, 1, fout) != 1) {
-					fclose(fout);
-					return pixelWriting;
-				}
-			}
-			number = 0;
-			for (j = 0; j < (3 * bmIIn->biWidth) % 4; j++)
-				if (fwrite(&number, 1, 1, fout) != 1) {
-					fclose(fout);
-					return pixelWriting;
-				}
-		}
-	}
+ 	}
 	fclose(fout);
 	return OK;
 }

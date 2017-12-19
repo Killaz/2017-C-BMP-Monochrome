@@ -2,8 +2,6 @@
 
 #define BMP_H
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 
 #define upInt(a, b) ((a) + ((b) - (a) % (b)) % (b))
 
@@ -11,6 +9,8 @@ typedef unsigned long  int DWORD;
 typedef          long  int LONG;
 typedef unsigned short int WORD;
 typedef unsigned char      BYTE;
+
+#pragma pack(1)
 
 typedef struct tagBitMapFileHeader {
 	DWORD   bfSize, bfOffBits;
@@ -22,6 +22,8 @@ typedef struct tagBitMapInfoHeader {
 	LONG   biWidth, biHeight, biXPelsPerMeter, biYPelsPerMeter;
 	WORD   biPlanes, biBitCount;
 } __attribute__((packed)) bitMapInfoHeader;
+
+#pragma pack()
 
 typedef struct tagBgr {
 	BYTE b, g, r;
