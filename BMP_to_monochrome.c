@@ -9,6 +9,14 @@
 enum commands_names {input_command, output_command, help_command};
 const char *commands[] = {"--input=", "--output=", "--help", };
 
+BYTE isEchoOn() {
+#ifdef ECHO_ON
+	return 1;
+#else
+	return 0;
+#endif
+}
+
 int main(int argc, char *argv[]) {
 	int i;
 	char finName[MAX_PATH_LEN] = "test_in.bmp", foutName[MAX_PATH_LEN] = "test_out.bmp", foutBasicName[MAX_PATH_LEN] = "test_out";
@@ -49,61 +57,50 @@ int main(int argc, char *argv[]) {
 		} else
 			printf("Can't recognize \"%s\" (%d) input option\n", argv[i], i);
 	}
-#ifdef ECHO_ON
-	fprintf(stderr, "Opening \"%s\" input:\n", finName);
-	if (!(err = explainError(readBMP(finName, &bmF, &bmI, &bmD), 0)))
-#else
-	if (!(err = explainError(readBMP(finName, &bmF, &bmI, &bmD), 1)))
-#endif
+	if (isEchoOn())
+		fprintf(stderr, "Opening \"%s\" input:\n", finName);
+	if (!(err = explainError(readBMP(finName, &bmF, &bmI, &bmD), !isEchoOn())))
 	{
 		freePixels(&bmD, &bmI);
 		return 1;
 	}
-#ifdef ECHO_ON
-	fprintf(stderr, "Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
-	                bmI.biWidth, bmI.biHeight, bmI.biBitCount, bmI.biCompression, bmF.bfOffBits, bmF.bfSize, bmI.biClrUsed);
-#endif
-
+	if (isEchoOn())
+		fprintf(stderr, "Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
+		                 bmI.biWidth, bmI.biHeight, bmI.biBitCount, bmI.biCompression, bmF.bfOffBits, bmF.bfSize, bmI.biClrUsed);
 // debug - output 1,4,8-bit output
 #ifdef DEBUG
-	foutName[0] = '\0';
-	strcat(foutName, foutBasicName);
+	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_1bit.bmp");
-#ifdef ECHO_ON
-	fprintf(stderr, "Wtiring 1-bit bmp output to \"%s\"...\n", foutName);
-	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 1), 0))
-		fprintf(stderr, "\tOK\n");
-	else
-		fprintf(stderr, "\tError!\n");
-#else
-	writeBMP(foutName, &bmF, &bmI, bmD, 1);
-#endif
+	if (isEchoOn()) {
+		fprintf(stderr, "Wtiring 1-bit bmp output to \"%s\"...\n", foutName);
+		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 1), 0))
+			fprintf(stderr, "\tOK\n");
+		else
+			fprintf(stderr, "\tError!\n");
+	} else
+		writeBMP(foutName, &bmF, &bmI, bmD, 1);
 
-	foutName[0] = '\0';
-	strcat(foutName, foutBasicName);
+	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_4bit.bmp");
-#ifdef ECHO_ON
-	fprintf(stderr, "Writing 4-bit bmp output to \"%s\"...\n", foutName);
-	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 4), 0))
-		fprintf(stderr, "\tOK\n");
-	else
-		fprintf(stderr, "\tError!\n");
-#else
-	writeBMP(foutName, &bmF, &bmI, bmD, 4);
-#endif
+	if (isEchoOn()) {
+		fprintf(stderr, "Writing 4-bit bmp output to \"%s\"...\n", foutName);
+		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 4), 0))
+			fprintf(stderr, "\tOK\n");
+		else
+			fprintf(stderr, "\tError!\n");
+	} else
+		writeBMP(foutName, &bmF, &bmI, bmD, 4);
 
-	foutName[0] = '\0';
-	strcat(foutName, foutBasicName);
+	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_8bit.bmp");
-#ifdef ECHO_ON
-	fprintf(stderr, "Writing 8-bit bmp output to \"%s\"...\n", foutName);
-	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 8), 0))
-		fprintf(stderr, "\tOK\n");
-	else
-		fprintf(stderr, "\tError!\n");
-#else
-	writeBMP(foutName, &bmF, &bmI, bmD, 8);
-#endif
+	if (isEchoOn()) {
+		fprintf(stderr, "Writing 8-bit bmp output to \"%s\"...\n", foutName);
+		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 8), 0))
+			fprintf(stderr, "\tOK\n");
+		else
+			fprintf(stderr, "\tError!\n");
+	} else
+		writeBMP(foutName, &bmF, &bmI, bmD, 8);
 
 #else
 // no debug mode - output only 1-bit bmp
