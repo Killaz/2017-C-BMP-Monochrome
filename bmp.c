@@ -77,12 +77,12 @@ BMPError readBitMapFileHeader(FILE *fin, const bitMapFileHeader *bmF) {
 BMPError writeBitMapFileHeader(FILE *fout, const bitMapFileHeader *bmF) {
 	if (fout == NULL)
 		return noOutput;
-	if (fwrite((void*) &bmF->bfType, 2, 1, fout) > 0 && fwrite((void*) &bmF->bfSize, 4, 1, fout) > 0 &&
-	    fwrite((void*) &bmF->bfReserved1, 2, 1, fout) > 0 && fwrite((void*) &bmF->bfReserved2, 2, 1, fout) > 0 &&
-	    fwrite((void*) &bmF->bfOffBits, 4, 1, fout) > 0
-	)
-		return OK;
-	return headerWriting;
+	fwrite((void*) &bmF->bfType, 2, 1, fout);
+	fwrite((void*) &bmF->bfSize, 4, 1, fout);
+	fwrite((void*) &bmF->bfReserved1, 2, 1, fout);
+	fwrite((void*) &bmF->bfReserved2, 2, 1, fout);
+	fwrite((void*) &bmF->bfOffBits, 4, 1, fout);
+	return OK;
 }
 
 BMPError readBitMapInfoHeader(FILE *fin, bitMapInfoHeader *bmI) {
@@ -98,15 +98,18 @@ BMPError readBitMapInfoHeader(FILE *fin, bitMapInfoHeader *bmI) {
 }
 
 BMPError writeBitMapInfoHeader(FILE *fout, const bitMapInfoHeader *bmI) {
-	if (fwrite((void*) &bmI->biSize, 4, 1, fout) > 0 && fwrite((void*) &bmI->biWidth, 4, 1, fout) > 0 &&
-	    fwrite((void*) &bmI->biHeight, 4, 1, fout) > 0 && fwrite((void*) &bmI->biPlanes, 2, 1, fout) > 0 &&
-	    fwrite((void*) &bmI->biBitCount, 2, 1, fout) > 0 && fwrite((void*) &bmI->biCompression, 4, 1, fout) > 0 &&
-	    fwrite((void*) &bmI->biSizeImage, 4, 1, fout) > 0 && fwrite((void*) &bmI->biXPelsPerMeter, 4, 1, fout) > 0 &&
-	    fwrite((void*) &bmI->biYPelsPerMeter, 4, 1, fout) > 0 && fwrite((void*) &bmI->biClrUsed, 4, 1, fout) > 0 &&
-	    fwrite((void*) &bmI->biClrImportant, 4, 1, fout) > 0
-	)
-		return OK;
-	return infoWriting;
+	fwrite((void*) &bmI->biSize, 4, 1, fout);
+	fwrite((void*) &bmI->biWidth, 4, 1, fout);
+	fwrite((void*) &bmI->biHeight, 4, 1, fout);
+	fwrite((void*) &bmI->biPlanes, 2, 1, fout);
+	fwrite((void*) &bmI->biBitCount, 2, 1, fout);
+	fwrite((void*) &bmI->biCompression, 4, 1, fout);
+	fwrite((void*) &bmI->biSizeImage, 4, 1, fout);
+	fwrite((void*) &bmI->biXPelsPerMeter, 4, 1, fout);
+	fwrite((void*) &bmI->biYPelsPerMeter, 4, 1, fout);
+	fwrite((void*) &bmI->biClrUsed, 4, 1, fout);
+	fwrite((void*) &bmI->biClrImportant, 4, 1, fout);
+	return OK;
 }
 
 void readingError(FILE **f, bgr ***bmD, bitMapInfoHeader *bmI) {
@@ -228,87 +231,91 @@ BMPError readBMP(const char *finName, bitMapFileHeader *bmF, bitMapInfoHeader *b
 	return err;
 }
 
-BMPError writeBMP(const char *foutName, const bitMapFileHeader *bmFIn, const bitMapInfoHeader *bmIIn, bgr **bmD, BYTE newBitCount) {
-	FILE *fout;
-	LONG i, j, k;
-	unsigned long long median = 0;
-	bgra tmp;
-	BMPError err = OK;
-	bitMapFileHeader *bmF;
-	bitMapInfoHeader *bmI;
+BMPError writeHeaders(FILE **fout, const char *foutName, bitMapFileHeader bmF, bitMapInfoHeader bmI, int newBitCount) {
+	BMPError err;
 	if (newBitCount != 1 && newBitCount != 4 && newBitCount != 8)
 		return noSuchOutputBitCount;
-	bmF = (bitMapFileHeader *) malloc(sizeof(bitMapFileHeader));
-	bmI = (bitMapInfoHeader *) malloc(sizeof(bitMapInfoHeader));
-	if (bmF == NULL || bmI == NULL)
-		return noMemory;
-	if ((fout = fopen(foutName, "wb")) == NULL)
+	if ((*fout = fopen(foutName, "wb")) == NULL)
 		return noOutput;
-	memcpy(bmF, bmFIn, sizeof(bitMapFileHeader));
-	memcpy(bmI, bmIIn, sizeof(bitMapInfoHeader));
-	bmI->biSize = sizeof(bitMapInfoHeader);
-	bmF->bfOffBits = sizeof(bitMapFileHeader) + bmI->biSize + (1 << newBitCount) * sizeof(bgra);
-	bmI->biCompression = 0;
+	bmI.biSize = sizeof(bitMapInfoHeader);
+	bmF.bfOffBits = sizeof(bitMapFileHeader) + bmI.biSize + (1 << newBitCount) * sizeof(bgra);
+	bmI.biCompression = 0;
 	if (newBitCount == 1)
-		bmF->bfSize = bmF->bfOffBits + upInt(bmI->biWidth, 8) / 8 * bmI->biHeight * sizeof(BYTE) +
-		              bmI->biHeight * ((3 * upInt(bmI->biWidth, 8) / 8) % 4) * sizeof(BYTE);
+		bmF.bfSize = bmF.bfOffBits + upInt(bmI.biWidth, 8) / 8 * bmI.biHeight * sizeof(BYTE) +
+		              bmI.biHeight * ((3 * upInt(bmI.biWidth, 8) / 8) % 4) * sizeof(BYTE);
 	else if (newBitCount == 4)
-		bmF->bfSize = bmF->bfOffBits + upInt(bmI->biWidth, 8) / 4 * bmI->biHeight * sizeof(WORD) +
-	                  bmI->biHeight * (3 * ((bmIIn->biWidth & 1) == 0 ? bmIIn->biWidth : bmIIn->biWidth + 1) / 2) % 4 * sizeof(BYTE);
+		bmF.bfSize = bmF.bfOffBits + upInt(bmI.biWidth, 8) / 4 * bmI.biHeight * sizeof(WORD) +
+	                 bmI.biHeight * (3 * ((bmI.biWidth & 1) == 0 ? bmI.biWidth : bmI.biWidth + 1) / 2) % 4 * sizeof(BYTE);
 	else
-		bmF->bfSize = bmF->bfOffBits + upInt(bmI->biWidth, 8) * bmI->biHeight * sizeof(BYTE) +
-	                  bmI->biHeight * (3 * bmIIn->biWidth) % 4 * sizeof(BYTE);
-	bmI->biBitCount = newBitCount;
-	err = writeBitMapFileHeader(fout, bmF) | writeBitMapInfoHeader(fout, bmI);
-	free(bmI);
-	free(bmF);
-	if (err != OK || err != OK) {
-		fclose(fout);
+		bmF.bfSize = bmF.bfOffBits + upInt(bmI.biWidth, 8) * bmI.biHeight * sizeof(BYTE) +
+	                 bmI.biHeight * (3 * bmI.biWidth) % 4 * sizeof(BYTE);
+	bmI.biBitCount = newBitCount;
+	if ((err = writeBitMapFileHeader(*fout, &bmF) | writeBitMapInfoHeader(*fout, &bmI)) != OK) {
+		fclose(*fout);
+		*fout = NULL;
 		return err;
 	}
-	bmI = NULL, bmF = NULL;
-	int skip = (3 * upInt(bmIIn->biWidth, 8) / 8) % 4;
-	if (newBitCount == 4)
-		skip = (3 * ((bmIIn->biWidth & 1) == 0 ? bmIIn->biWidth : bmIIn->biWidth + 1) / 2) % 4;
-	else if (newBitCount == 8)
-		skip = (3 * bmIIn->biWidth) % 4;
-	j = 255 / ((1 << newBitCount) - 1);
-	for (i = 0; i < 256; i += j) {
-		setrgba(&tmp, i, i, i, 0);
-		if (fwrite(&tmp, 1, 4, fout) != 4) {
-			fclose(fout);
-			return pixelWriting;
-		}
- 	}
- 	if (newBitCount == 1) {
-		for (i = 0; i < bmIIn->biHeight; i++)
-			for (j = 0; j < bmIIn->biWidth; j++)
-				median += (bmD[i][j].r + bmD[i][j].g + bmD[i][j].b);
-		median /= (bmIIn->biHeight * bmIIn->biWidth);
-	}
-	for (i = bmIIn->biHeight - 1; i >= 0; i--) {
+	return OK;
+}
+
+void writePixelCanvas1bit(FILE *fout, const bitMapInfoHeader *bmI, bgr **bmD) {
+	unsigned long long median = 0;
+	int i, j, k;
+	int skip = (3 * upInt(bmI->biWidth, 8) / 8) % 4;
+	for (i = 0; i < bmI->biHeight; i++)
+		for (j = 0; j < bmI->biWidth; j++)
+			median += (bmD[i][j].r + bmD[i][j].g + bmD[i][j].b);
+	median /= (bmI->biHeight * bmI->biWidth);
+	for (i = bmI->biHeight - 1; i >= 0; i--) {
 		BYTE number = 0;
-		for (j = 0; j < bmIIn->biWidth; j += 8 / newBitCount) {
+		for (j = 0; j < bmI->biWidth; j += 8) {
 			number = 0;
-			for (k = 0; k < 8 / newBitCount && j + k < bmIIn->biWidth; k++)
-				if (newBitCount == 1) {
-					if (bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b > (int) median)
-						number |= (1 << (7 - k));
-				} else
-					number |= ((BYTE)((bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b) / (51.0 / (newBitCount / 8 * 16 + 1)) + 0.5)
-					                 << (8 - newBitCount) * (1 - k));
-			if (fwrite(&number, 1, 1, fout) != 1) {
-				fclose(fout);
-				return pixelWriting;
-			}
+			for (k = 0; k < 8 && j + k < bmI->biWidth; k++)
+				if (bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b > (BYTE) median)
+					number |= (1 << (7 - k));
+			fwrite(&number, 1, 1, fout);
 		}
 		number = 0;
 		for (j = 0; j < skip; j++)
-			if (fwrite(&number, 1, 1, fout) != 1) {
-				fclose(fout);
-				return pixelWriting;
-			}
+			fwrite(&number, 1, 1, fout);
  	}
+}
+
+void writePixelCanvas4_8bit(FILE *fout, const bitMapInfoHeader *bmI, bgr **bmD, int newBitCount) {
+	int i, j, k;
+	int skip = (3 * ((bmI->biWidth & 1) == 0 ? bmI->biWidth : bmI->biWidth + 1) / 2) % 4;
+	if (newBitCount == 8)
+		skip = (3 * bmI->biWidth) % 4;
+	for (i = bmI->biHeight - 1; i >= 0; i--) {
+		BYTE number = 0;
+		for (j = 0; j < bmI->biWidth; j += 8 / newBitCount) {
+			number = 0;
+			for (k = 0; k < 8 / newBitCount && j + k < bmI->biWidth; k++)
+				number |= ((BYTE)((bmD[i][j + k].r + bmD[i][j + k].g + bmD[i][j + k].b) / (51.0 / (newBitCount / 8 * 16 + 1)) + 0.5)
+				                 << (8 - newBitCount) * (1 - k));
+			fwrite(&number, 1, 1, fout);
+		}
+		number = 0;
+		for (j = 0; j < skip; j++)
+			fwrite(&number, 1, 1, fout);
+ 	}
+}
+
+BMPError writeBMP(const char *foutName, const bitMapFileHeader *bmF, const bitMapInfoHeader *bmI, bgr **bmD, BYTE newBitCount) {
+	FILE *fout = NULL;
+	LONG i, steps = 255 / ((1 << newBitCount) - 1);;
+	bgra tmp;
+	BMPError err = OK;
+	if ((err = writeHeaders(&fout, foutName, *bmF, *bmI, newBitCount)) != OK)
+		return err;
+	for (i = 0; i < 256; i += steps) {
+		setrgba(&tmp, i, i, i, 0);
+		fwrite(&tmp, 1, 4, fout);
+ 	}
+ 	if (newBitCount == 1)
+		writePixelCanvas1bit(fout, bmI, bmD);
+	else
+		writePixelCanvas4_8bit(fout, bmI, bmD, newBitCount);
 	fclose(fout);
 	return OK;
 }
