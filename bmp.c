@@ -26,8 +26,10 @@ BYTE explainError(BMPError err, BYTE silent) {
 			if (!silent)
 				fprintf(stderr, "Input is probably not BMP file, but it was read as it would be bmp (results may be incorrect)\n");
 			return 1;
-		} else if (!silent)
+		} else {
 			fprintf(stderr, "Input file is not BMP, and there was error:\n");
+			return 0;
+		}
 	}
 	err &= 0xFF;
 /*	if (silent)
@@ -155,23 +157,17 @@ void readCanvasWithPalette(FILE **fin, bgr ***bmD, bitMapInfoHeader *bmI, bgr *p
 
 void readCanvasWithoutPalette(FILE **fin, bgr ***bmD, bitMapInfoHeader *bmI, BMPError *err) {
 	int i, j;
-	if (bmI->biBitCount > 16)
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++) {
+	for (i = bmI->biHeight - 1; i >= 0; i--) {
+		for (j = 0; j < bmI->biWidth; j++) {
+			if (bmI->biBitCount > 16) {
 				if (bmI->biBitCount == 32)
 					fseek(*fin, 1, SEEK_CUR);
 				if (fread((void *) &(*bmD)[i][j], 1, 3, *fin) != 3) {
 					*err |= pixelReading;
 					readingError(fin, bmD, bmI);
 				}
-			}
-			if (bmI->biBitCount == 24)
-				fseek(*fin, bmI->biWidth % 4, SEEK_CUR);
-		}
-	else {
-		WORD pixel;
-		for (i = bmI->biHeight - 1; i >= 0; i--) {
-			for (j = 0; j < bmI->biWidth; j++) {
+			} else {
+				WORD pixel;
 				if (fread((void *) &pixel, 1, 2, *fin) != 2) {
 					*err |= pixelReading;
 					readingError(fin, bmD, bmI);
@@ -180,8 +176,9 @@ void readCanvasWithoutPalette(FILE **fin, bgr ***bmD, bitMapInfoHeader *bmI, BMP
 				(*bmD)[i][j].g = ((pixel >> 5) & 0x1F) * 255 / 31.0;
 				(*bmD)[i][j].r = ((pixel >> 10) & 0x1F) * 255 / 31.0;
 			}
-			fseek(*fin, (2 * bmI->biWidth) % 4, SEEK_CUR);
 		}
+		if (bmI->biBitCount < 32)
+			fseek(*fin, (1 + ((bmI->biBitCount - 16) > 0)) * bmI->biWidth % 4, SEEK_CUR);
 	}
 }
 
