@@ -4,10 +4,10 @@ project(bmpToMonochrome)
 
 set(source BMP_to_monochrome.c)
 
-#add_library(bmpC STATIC bmp.c)
 add_executable(bmpToMonochrome BMP_to_monochrome.c bmp.c)
 
-#target_link_libraries(bmpToMonochrome bmpC)
+SET(DEBUG False CACHE BOOLEAN "1 if debug-mode is activated, 0 if not")
+
 if (DEBUG)
 	add_definitions(-DDEBUG -DECHO_ON -Wall -Wextra)
 else(DEBUG)
