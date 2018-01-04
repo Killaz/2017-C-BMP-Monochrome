@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "bmp.h"
 
 #define INPUT_FILE_MISSING_ERROR_MEANS_HELP_COMMAND 1
@@ -15,6 +16,15 @@ BYTE isEchoOn() {
 #else
 	return 0;
 #endif
+}
+
+void Log(const char *format, ...) {
+	va_list args;
+	va_start(args, format);
+	if (isEchoOn()) {
+		vfprintf(stderr, format, args);
+	}
+	va_end(args);
 }
 
 int main(int argc, char *argv[]) {
@@ -57,55 +67,44 @@ int main(int argc, char *argv[]) {
 		} else
 			printf("Can't recognize \"%s\" (%d) input option\n", argv[i], i);
 	}
-	if (isEchoOn())
-		fprintf(stderr, "Opening \"%s\" input:\n", finName);
+	Log("Opening \"%s\" input:\n", finName);
 	if (!(err = explainError(readBMP(finName, &bmF, &bmI, &bmD), !isEchoOn())))
 	{
 		freePixels(&bmD, &bmI);
 		return 1;
 	}
-	if (isEchoOn())
-		fprintf(stderr, "Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
+	Log("Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
 		                 bmI.biWidth, bmI.biHeight, bmI.biBitCount, bmI.biCompression, bmF.bfOffBits, bmF.bfSize, bmI.biClrUsed);
 // debug - output 1,4,8-bit output
 #ifdef DEBUG
 	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_1bit.bmp");
-	if (isEchoOn()) {
-		fprintf(stderr, "Wtiring 1-bit bmp output to \"%s\"...\n", foutName);
-		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 1), 0))
-			fprintf(stderr, "\tOK\n");
-		else
-			fprintf(stderr, "\tError!\n");
-	} else
-		writeBMP(foutName, &bmF, &bmI, bmD, 1);
+	Log("Wtiring 1-bit bmp output to \"%s\"...\n", foutName);
+	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 1), !isEchoOn()))
+		Log("\tOK\n");
+	else
+		Log("\tError!\n");
 
 	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_4bit.bmp");
-	if (isEchoOn()) {
-		fprintf(stderr, "Writing 4-bit bmp output to \"%s\"...\n", foutName);
-		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 4), 0))
-			fprintf(stderr, "\tOK\n");
-		else
-			fprintf(stderr, "\tError!\n");
-	} else
-		writeBMP(foutName, &bmF, &bmI, bmD, 4);
+	Log("Writing 4-bit bmp output to \"%s\"...\n", foutName);
+	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 4), !isEchoOn()))
+		Log("\tOK\n");
+	else
+		Log("\tError!\n");
 
 	strcpy(foutName, foutBasicName);
 	strcat(foutName, "_8bit.bmp");
-	if (isEchoOn()) {
-		fprintf(stderr, "Writing 8-bit bmp output to \"%s\"...\n", foutName);
-		if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 8), 0))
-			fprintf(stderr, "\tOK\n");
-		else
-			fprintf(stderr, "\tError!\n");
-	} else
-		writeBMP(foutName, &bmF, &bmI, bmD, 8);
+	Log("Writing 8-bit bmp output to \"%s\"...\n", foutName);
+	if (explainError(writeBMP(foutName, &bmF, &bmI, bmD, 8), !isEchoOn()))
+		Log("\tOK\n");
+	else
+		Log("\tError!\n");
 
 #else
 // no debug mode - output only 1-bit bmp
 	if (!explainError(writeBMP(foutName, &bmF, &bmI, bmD, 1), 1))
-		fprintf(stderr, "\tError writing output file: \"%s\"!\n", foutName);
+		Log("\tError writing output file: \"%s\"!\n", foutName);
 #endif
 	freePixels(&bmD, &bmI);
 	return 0;
