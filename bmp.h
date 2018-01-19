@@ -2,13 +2,14 @@
 
 #define BMP_H
 #include <stdio.h>
+#include <stdint.h>
 
 #define upInt(a, b) ((a) + ((b) - (a) % (b)) % (b))
 
-typedef unsigned long  int DWORD;
-typedef          long  int LONG;
-typedef unsigned short int WORD;
-typedef unsigned char      BYTE;
+typedef uint32_t DWORD;
+typedef  int32_t LONG;
+typedef uint16_t WORD;
+typedef  uint8_t BYTE;
 
 #pragma pack(1)
 
