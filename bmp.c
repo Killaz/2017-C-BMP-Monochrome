@@ -1,8 +1,8 @@
-#include "bmp.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "bmp.h"
 
 BYTE setrgba(bgra *pixel, BYTE r, BYTE g, BYTE b, BYTE a) {
 	if (pixel == NULL) {
