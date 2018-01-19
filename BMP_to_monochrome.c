@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+
 #include "bmp.h"
 
 #define INPUT_FILE_MISSING_ERROR_MEANS_HELP_COMMAND 1
@@ -25,6 +26,14 @@ void Log(const char *format, ...) {
 		vfprintf(stderr, format, args);
 	}
 	va_end(args);
+}
+
+void pause(void) {
+#ifdef WIN32
+	system("pause");
+#else
+	system("read -rsp $'Press any key to continue...\n' -n 1 key");
+#endif
 }
 
 int main(int argc, char *argv[]) {
@@ -62,7 +71,7 @@ int main(int argc, char *argv[]) {
 #endif
 		        , commands[help_command], commands[input_command], commands[output_command]
 		       );
-	       system("pause");
+	       pause();
 	       return 0;
 		} else
 			printf("Can't recognize \"%s\" (%d) input option\n", argv[i], i);
@@ -74,7 +83,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	Log("Opened picture: width = %lu, height = %lu, bitsPerPixel = %d, compression = %lu, bfOffBits = %lu, size = %lu bytes, biClrUsed = %lu\n",
-		                 bmI.biWidth, bmI.biHeight, bmI.biBitCount, bmI.biCompression, bmF.bfOffBits, bmF.bfSize, bmI.biClrUsed);
+		                 (ulong) bmI.biWidth, (ulong) bmI.biHeight, (int) bmI.biBitCount, (ulong) bmI.biCompression, (ulong) bmF.bfOffBits, (ulong) bmF.bfSize, (ulong) bmI.biClrUsed);
 // debug - output 1,4,8-bit output
 #ifdef DEBUG
 	strcpy(foutName, foutBasicName);

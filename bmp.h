@@ -11,6 +11,9 @@ typedef  int32_t LONG;
 typedef uint16_t WORD;
 typedef  uint8_t BYTE;
 
+typedef unsigned long ulong;
+typedef unsigned int uint;
+
 #pragma pack(1)
 
 typedef struct tagBitMapFileHeader {
